@@ -735,7 +735,7 @@ class StateTransitionPerturbationModel(PerturbationModel):
 
         return self.loss_fn(pred, target)
 
-    def _densify_counts(self, counts):
+    def _densify_counts(self, counts, out=None):
         """Return the dense ``[cells, genes]`` gene-count targets the decoder loss compares against.
 
         The data pipeline may hand over the targets as a compact CSR bundle (values/cols/rowptr) so that the
@@ -746,15 +746,19 @@ class StateTransitionPerturbationModel(PerturbationModel):
         """
         if isinstance(counts, dict) and counts.get("__csr_batch__"):
             n_cells = int(counts["n_cells"])
-            dense = torch.zeros(
-                (n_cells, int(counts["n_genes"])), dtype=counts["values"].dtype, device=counts["values"].device
-            )
+            n_genes = int(counts["n_genes"])
+            if out is not None and tuple(out.shape) == (n_cells, n_genes):
+                dense = out.zero_()
+            else:
+                dense = torch.zeros((n_cells, n_genes), dtype=counts["values"].dtype,
+                                    device=counts["values"].device)
             if counts["values"].numel():
                 rowptr = counts["rowptr"]
                 rows = torch.repeat_interleave(
                     torch.arange(n_cells, device=rowptr.device), rowptr[1:] - rowptr[:-1]
                 )
-                dense[rows, counts["cols"]] = counts["values"]
+                cols = counts["cols"]
+                dense[rows, cols.long() if cols.dtype != torch.long else cols] = counts["values"]
             return dense
         return counts
 

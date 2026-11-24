@@ -182,12 +182,13 @@ class StepGraph:
                 if buf.shape != src.shape:
                     raise RuntimeError("step graph: batch shape changed")
                 buf.copy_(src)
-        counts = self.model._densify_counts(batch["pert_cell_counts"])
+        counts = batch["pert_cell_counts"]
         buf = self.inputs.get("pert_cell_counts")
         if buf is None:
-            self.inputs["pert_cell_counts"] = counts.detach().clone()
+            self.inputs["pert_cell_counts"] = self.model._densify_counts(counts).detach().clone()
         else:
-            buf.copy_(counts)
+            # Densify straight into the buffer the graph reads: one scatter, no second 749 MiB copy.
+            self.model._densify_counts(counts, out=buf)
         return self.inputs
 
     # -- masks ----------------------------------------------------------------

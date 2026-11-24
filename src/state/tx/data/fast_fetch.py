@@ -139,14 +139,14 @@ def _install() -> None:
                 start, end = int(r["offset"]), int(r["end"])
                 if end > start:
                     values.append(np.asarray(r["data"][start:end], dtype=np.float32))
-                    cols.append(np.asarray(r["indices"][start:end], dtype=np.int64))
+                    cols.append(np.asarray(r["indices"][start:end], dtype=np.int32))
                 rowptr.append(rowptr[-1] + (end - start))
             # Ship the non-zeros, not the 97.6% zeros: ~48 MiB of CSR instead of a 749 MiB dense tensor.
             # The training step densifies this on the GPU into exactly the same tensor it used to receive.
             out["pert_cell_counts"] = {
                 "__csr_batch__": True,
                 "values": torch.from_numpy(np.concatenate(values) if values else np.zeros(0, np.float32)),
-                "cols": torch.from_numpy(np.concatenate(cols) if cols else np.zeros(0, np.int64)),
+                "cols": torch.from_numpy(np.concatenate(cols) if cols else np.zeros(0, np.int32)),
                 "rowptr": torch.tensor(rowptr, dtype=torch.int64),
                 "n_genes": n_genes,
                 "n_cells": len(rows),
