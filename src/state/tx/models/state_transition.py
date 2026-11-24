@@ -543,7 +543,9 @@ class StateTransitionPerturbationModel(PerturbationModel):
         # capturing stream instead of failing the capture (torch's own documented option (c)).
         torch.autograd.graph.set_override_stale_capture_stream(True)
         try:
-            with torch.cuda.graph(graph, stream=side):
+            # thread_local: the data-loader's pinning thread allocates host memory while we capture, and the
+            # default "global" mode treats any other thread's allocation as a capture violation.
+            with torch.cuda.graph(graph, stream=side, capture_error_mode="thread_local"):
                 loss = self._eager_training_step(static, batch_idx, padded)
                 # `loss.backward()` would route through the parameter's persistent AccumulateGrad node, which
                 # still remembers the stream it first ran on; `autograd.grad` has no such node and returns the
