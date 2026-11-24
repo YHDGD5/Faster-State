@@ -8,6 +8,7 @@ import torch.nn as nn
 from lightning.pytorch import LightningModule
 import typing as tp
 
+from .graphstep import MaskDropout
 from .utils import get_loss_fn
 
 logger = logging.getLogger(__name__)
@@ -65,7 +66,7 @@ class LatentToGeneDecoder(nn.Module):
                 layers.append(nn.Linear(input_dim, hidden_dim))
                 layers.append(nn.LayerNorm(hidden_dim))
                 layers.append(nn.GELU())
-                layers.append(nn.Dropout(dropout))
+                layers.append(MaskDropout(dropout))
                 input_dim = hidden_dim
 
             # Final output layer

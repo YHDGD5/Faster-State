@@ -12,6 +12,7 @@ from typing import Dict, Optional, Tuple
 
 from .base import PerturbationModel
 from .decoders import FinetuneVCICountsDecoder
+from .graphstep import GraphSamplesLoss, StepGraph, graph_mode_allowed, record_begin, record_end
 from .utils import build_mlp, get_activation_class, get_transformer_backbone, apply_lora
 
 
@@ -168,7 +169,7 @@ class StateTransitionPerturbationModel(PerturbationModel):
         blur = kwargs.get("blur", 0.05)
         loss_name = kwargs.get("loss", "energy")
         if loss_name == "energy":
-            self.loss_fn = SamplesLoss(loss=self.distributional_loss, blur=blur)
+            self.loss_fn = GraphSamplesLoss(loss=self.distributional_loss, blur=blur)
         elif loss_name == "mse":
             self.loss_fn = nn.MSELoss()
         elif loss_name == "se":
@@ -325,6 +326,16 @@ class StateTransitionPerturbationModel(PerturbationModel):
             self.gene_decoder = FinetuneVCICountsDecoder(
                 genes=gene_names,
             )
+
+        # Whole-step CUDA graph (see graphstep.py). Outside the deterministic numerics path the model drives
+        # its own backward/clip/step so that the entire update can be captured as one graph and replayed
+        # without the host in the loop. Under torch.use_deterministic_algorithms the plain eager path below
+        # runs unchanged, which is what the numerics record compares.
+        self._graph_mode = graph_mode_allowed()
+        self._gstep = None
+        self._graph_logs = None
+        if self._graph_mode:
+            self.automatic_optimization = False
         print(self)
 
     def _build_networks(self, lora_cfg=None):
@@ -389,8 +400,188 @@ class StateTransitionPerturbationModel(PerturbationModel):
             if not torch.are_deterministic_algorithms_enabled():
                 self.final_down_then_up = torch.compile(self.final_down_then_up, dynamic=False)
 
+    def log(self, name, value, *args, **kwargs):
+        """Buffer metrics while a step is being captured; they are written to Lightning after the replay."""
+        stash = self._graph_logs
+        if stash is not None:
+            stash[name] = value
+            return
+        return super().log(name, value, *args, **kwargs)
+
+    # ---------------------------------------------------------------- graph step
+
+    def _graph_optimizer(self):
+        trainer = getattr(self, "trainer", None)
+        opts = getattr(trainer, "optimizers", None) if trainer is not None else None
+        return opts[0] if opts else None
+
+    def _clip_and_step(self, gs) -> None:
+        """Gradient clip at the recipe value, then one Adam step -- all on the device, no host sync."""
+        grads = [p.grad for p in self.parameters() if p.grad is not None]
+        if gs.clip > 0.0 and grads:
+            norms = torch._foreach_norm(grads, 2.0)
+            total = torch.linalg.vector_norm(torch.stack([n.float() for n in norms]), 2.0)
+            coef = torch.clamp(gs.clip / (total + 1e-6), max=1.0)
+            torch._foreach_mul_(grads, coef)
+        gs.opt.step()
+        # Keep the gradient buffers allocated so the captured AccumulateGrad nodes keep writing into the same
+        # addresses; zeroing is what set_to_none=True would have done, minus the reallocation.
+        for p in self.parameters():
+            if p.grad is not None:
+                p.grad.zero_()
+
+    def _leaf_grads(self, loss):
+        """Gradients of `loss` w.r.t. every trainable parameter, without AccumulateGrad nodes.
+
+        A parameter's AccumulateGrad node is created once and remembers the stream of its first backward; a
+        capture on another stream then refuses it. `torch.autograd.grad` hands the gradients back directly and
+        never creates that node, so the same code can run eagerly and inside the captured graph.
+        """
+        params = [p for p in self.parameters() if p.requires_grad]
+        grads = torch.autograd.grad(loss, params, allow_unused=True)
+        for param, grad in zip(params, grads):
+            if grad is not None:
+                param.grad = grad
+        return params
+
+    def _ensure_grads(self):
+        for p in self.parameters():
+            if p.requires_grad and p.grad is None:
+                p.grad = torch.zeros_like(p)
+
+    def _graph_training_step(self, batch, batch_idx, padded=True):
+        gs = self._gstep
+        if gs is None:
+            gs = self._gstep = StepGraph(self)
+        if gs.failed:
+            loss = self._eager_training_step(batch, batch_idx, padded)
+            self._leaf_grads(loss)
+            self._clip_and_step(gs)
+            return loss.detach()
+        if gs.graph is None:
+            return self._graph_build_or_warm(batch, batch_idx, padded, gs)
+        if not gs.matches(batch):
+            # A batch shape the graph was not captured with (the loader's short last batch). Run the plain
+            # eager step, with the dropout layers drawing their own masks, so the draw order stays the
+            # reference's.
+            for m in gs.order or ():
+                m.disable()
+            try:
+                loss = self._eager_training_step(batch, batch_idx, padded)
+                self._leaf_grads(loss)
+            finally:
+                for m in gs.order or ():
+                    m.enable()
+            return loss.detach()
+        gs.prepare_masks()
+        gs.stage(batch)
+        gs.graph.replay()
+        self._clip_and_step(gs)
+        for key, value in gs.logs.items():
+            super().log(key, value)
+        return gs.loss
+
+    def _graph_build_or_warm(self, batch, batch_idx, padded, gs):
+        if gs.opt is None:
+            gs.opt = self._graph_optimizer()
+            trainer = getattr(self, "trainer", None)
+            gs.clip = float(getattr(trainer, "gradient_clip_val", 0.0) or 0.0) if trainer is not None else 0.0
+            if gs.opt is None:
+                gs.failed = True
+                return self._eager_training_step(batch, batch_idx, padded)
+            self._ensure_grads()          # every parameter owns a gradient buffer before capture
+        if gs.warm < 2:
+            gs.warm += 1
+            return self._graph_warm(batch, batch_idx, padded, gs)
+        return self._graph_capture(batch, batch_idx, padded, gs)
+
+    def _graph_warm(self, batch, batch_idx, padded, gs):
+        """One real eager step; the first one records the dropout draw order."""
+        static = gs.stage(batch)
+        first = gs.order is None
+        order = record_begin() if first else None
+        loss = self._eager_training_step(static, batch_idx, padded)
+        if first:
+            gs.order = record_end(order)
+        self._leaf_grads(loss)
+        self._clip_and_step(gs)
+        return loss.detach()
+
+    def _graph_capture(self, batch, batch_idx, padded, gs):
+        static = gs.stage(batch)
+        rng = torch.cuda.get_rng_state()
+        gs.enable_masks()
+        gs.prepare_masks()
+        # Warmup must run on a side stream: the autograd nodes remember the stream they first ran on, and a
+        # node that still points at the default stream cannot be captured. No optimizer step here and the
+        # masks are already drawn, so this costs no random numbers and changes no parameter.
+        side = torch.cuda.Stream()
+        side.wait_stream(torch.cuda.current_stream())
+        single_threaded = torch.autograd.grad_mode.set_multithreading_enabled(False)
+        single_threaded.__enter__()
+        try:
+            with torch.cuda.stream(side):
+                for p in self.parameters():          # allocate the gradient buffers on this stream
+                    p.grad = None
+                for _ in range(2):
+                    self._ensure_grads()
+                    self._graph_logs = {}
+                    warm = self._eager_training_step(static, batch_idx, padded)
+                    self._leaf_grads(warm)
+                    for p in self.parameters():
+                        if p.grad is not None:
+                            p.grad.zero_()
+        except BaseException:
+            single_threaded.__exit__(None, None, None)
+            raise
+        torch.cuda.current_stream().wait_stream(side)
+        self._graph_logs = None
+        graph = torch.cuda.CUDAGraph()
+        gs.logs = {}
+        self._graph_logs = gs.logs
+        # Autograd nodes created by the eager steps above remember the default stream; redirect them to the
+        # capturing stream instead of failing the capture (torch's own documented option (c)).
+        torch.autograd.graph.set_override_stale_capture_stream(True)
+        try:
+            with torch.cuda.graph(graph, stream=side):
+                loss = self._eager_training_step(static, batch_idx, padded)
+                # `loss.backward()` would route through the parameter's persistent AccumulateGrad node, which
+                # still remembers the stream it first ran on; `autograd.grad` has no such node and returns the
+                # gradients directly. The buffers it allocates are fixed by the capture, so on every replay
+                # the fresh values land in the same memory the optimizer below reads.
+                self._leaf_grads(loss)
+                self._clip_and_step(gs)
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            print(f"[graphstep] capture failed, staying eager: {type(exc).__name__}: {exc}", flush=True)
+            gs.failed = True
+            torch.autograd.graph.set_override_stale_capture_stream(False)
+            single_threaded.__exit__(None, None, None)
+            # Undo this step's mask draws so the eager retry consumes exactly the numbers the reference does.
+            torch.cuda.set_rng_state(rng)
+            for m in gs.order or ():
+                m.disable()
+            self._graph_logs = None
+            loss = self._eager_training_step(static, batch_idx, padded)
+            self._leaf_grads(loss)
+            self._clip_and_step(gs)
+            return loss.detach()
+        finally:
+            self._graph_logs = None
+            torch.autograd.graph.set_override_stale_capture_stream(False)
+        gs.graph = graph
+        gs.loss = loss
+        graph.replay()
+        # Clip and Adam stay on the stock eager path: the foreach kernels are markedly faster than the
+        # capture-safe Adam, and this is where the harness's per-step hook fires.
+        self._clip_and_step(gs)
+        for key, value in gs.logs.items():
+            super().log(key, value)
+        return gs.loss
+
     def encode_perturbation(self, pert: torch.Tensor) -> torch.Tensor:
-        """If needed, define how we embed the raw perturbation input."""
+        """If needed, define how you embed the raw perturbation input."""
         return self.pert_encoder(pert)
 
     def encode_basal_expression(self, expr: torch.Tensor) -> torch.Tensor:
@@ -569,6 +760,12 @@ class StateTransitionPerturbationModel(PerturbationModel):
 
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int, padded=True) -> torch.Tensor:
         """Training step logic for both main model and decoder."""
+        if self._graph_mode:
+            return self._graph_training_step(batch, batch_idx, padded)
+        return self._eager_training_step(batch, batch_idx, padded)
+
+    def _eager_training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int, padded=True,
+                             optimize: bool = True) -> torch.Tensor:
         batch = self._normalize_count_keys(batch)
         # Get model predictions (in latent space)
         confidence_pred = None

@@ -2,6 +2,8 @@ from typing import Union
 
 import torch
 import torch.nn as nn
+
+from .graphstep import MaskDropout
 from transformers import GPT2Config, GPT2Model, LlamaConfig, LlamaModel, PreTrainedModel
 
 # LoRA / PEFT
@@ -35,13 +37,13 @@ def build_mlp(
         # First layer
         layers.append(nn.Linear(in_dim, hidden_dim))
         layers.append(activation())  # instantiate the class
-        layers.append(nn.Dropout(dropout))
+        layers.append(MaskDropout(dropout))
 
         # Intermediate layers
         for _ in range(n_layers - 2):
             layers.append(nn.Linear(hidden_dim, hidden_dim))
             layers.append(activation())  # instantiate again
-            layers.append(nn.Dropout(dropout))
+            layers.append(MaskDropout(dropout))
 
         # Final layer
         layers.append(nn.Linear(hidden_dim, out_dim))
@@ -133,7 +135,9 @@ def get_transformer_backbone(key, kwargs) -> PreTrainedModel:
     # recorded tensors stay exactly what the reference records.
     if not torch.are_deterministic_algorithms_enabled():
         try:
-            model = torch.compile(model, dynamic=False, mode="reduce-overhead")
+            # "default" (no inductor cudagraphs): the whole step is captured in one CUDA graph of our own, and
+            # a cudagraph cannot be nested inside another one.
+            model = torch.compile(model, dynamic=False)
         except Exception:
             pass
     return model, model_dim

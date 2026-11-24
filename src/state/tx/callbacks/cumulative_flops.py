@@ -40,8 +40,16 @@ class CumulativeFLOPSCallback(Callback):
 
         model.zero_grad(set_to_none=True)
 
+        # A module that drives its own optimizer step must still be measured on the plain loss path: this probe
+        # runs one extra forward -- and with it one extra set of dropout draws, which the timing harness counts
+        # as part of the random-number stream. The eager entry point computes the same loss and draws the same
+        # numbers without touching the captured step.
+        eager = getattr(model, "_eager_training_step", None)
         try:
-            loss_out = model.training_step(batch, 0, padded=True)
+            if eager is not None and not getattr(model, "automatic_optimization", True):
+                loss_out = eager(batch, 0, padded=True)
+            else:
+                loss_out = model.training_step(batch, 0, padded=True)
         except TypeError:
             loss_out = model.training_step(batch, 0)
 
