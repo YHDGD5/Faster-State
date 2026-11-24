@@ -207,7 +207,19 @@ class PerturbationModel(ABC, LightningModule):
         self._build_decoder()
 
     def transfer_batch_to_device(self, batch, device, dataloader_idx: int):
-        return {k: (v.to(device, non_blocking=True) if isinstance(v, torch.Tensor) else v) for k, v in batch.items()}
+        def _move(value):
+            # The gene-count targets may arrive as a compact CSR bundle (a dict of small tensors) instead of
+            # a dense [cells, genes] block; move it and everything else tensor-wise, without copying the
+            # non-tensor metadata.
+            if isinstance(value, torch.Tensor):
+                return value.to(device, non_blocking=True)
+            if isinstance(value, dict):
+                return {k: _move(v) for k, v in value.items()}
+            if isinstance(value, (list, tuple)):
+                return type(value)(_move(v) for v in value)
+            return value
+
+        return {k: _move(v) for k, v in batch.items()}
 
     def _cp_log1p(self, value: torch.Tensor) -> torch.Tensor:
         """Normalize each count vector to ``counts_target_sum`` and apply log1p."""

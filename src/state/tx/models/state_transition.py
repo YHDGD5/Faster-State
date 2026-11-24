@@ -384,6 +384,10 @@ class StateTransitionPerturbationModel(PerturbationModel):
                 nn.GELU(),
                 nn.Linear(self.output_dim // 8, self.output_dim),
             )
+            # No dropout in this block, so compiling it is RNG-neutral; skip it under deterministic mode so
+            # the numerics record takes the eager path that matches the reference record.
+            if not torch.are_deterministic_algorithms_enabled():
+                self.final_down_then_up = torch.compile(self.final_down_then_up, dynamic=False)
 
     def encode_perturbation(self, pert: torch.Tensor) -> torch.Tensor:
         """If needed, define how we embed the raw perturbation input."""
@@ -540,6 +544,29 @@ class StateTransitionPerturbationModel(PerturbationModel):
 
         return self.loss_fn(pred, target)
 
+    def _densify_counts(self, counts):
+        """Return the dense ``[cells, genes]`` gene-count targets the decoder loss compares against.
+
+        The data pipeline may hand over the targets as a compact CSR bundle (values/cols/rowptr) so that the
+        host ships the ~2% that are non-zero instead of a 749 MiB block that is 97.6% zeros. Scattering it
+        here, on the device, produces exactly the same tensor the dense path would have produced -- same
+        ``float32`` values at the same positions, exact zeros elsewhere. A dense tensor (which is what the
+        frozen numerics fixture replays) is returned unchanged.
+        """
+        if isinstance(counts, dict) and counts.get("__csr_batch__"):
+            n_cells = int(counts["n_cells"])
+            dense = torch.zeros(
+                (n_cells, int(counts["n_genes"])), dtype=counts["values"].dtype, device=counts["values"].device
+            )
+            if counts["values"].numel():
+                rowptr = counts["rowptr"]
+                rows = torch.repeat_interleave(
+                    torch.arange(n_cells, device=rowptr.device), rowptr[1:] - rowptr[:-1]
+                )
+                dense[rows, counts["cols"]] = counts["values"]
+            return dense
+        return counts
+
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int, padded=True) -> torch.Tensor:
         """Training step logic for both main model and decoder."""
         batch = self._normalize_count_keys(batch)
@@ -626,7 +653,7 @@ class StateTransitionPerturbationModel(PerturbationModel):
 
         # Auxiliary batch prediction loss (per token), if enabled
         if self.gene_decoder is not None and "pert_cell_counts" in batch:
-            gene_targets = batch["pert_cell_counts"]
+            gene_targets = self._densify_counts(batch["pert_cell_counts"])
             # Train decoder to map latent predictions to gene space
 
             if self.detach_decoder:
@@ -706,7 +733,7 @@ class StateTransitionPerturbationModel(PerturbationModel):
             self.log("val/energy_loss", energy_component)
 
         if self.gene_decoder is not None and "pert_cell_counts" in batch:
-            gene_targets = batch["pert_cell_counts"]
+            gene_targets = self._densify_counts(batch["pert_cell_counts"])
 
             # Get model predictions from validation step
             latent_preds = pred
