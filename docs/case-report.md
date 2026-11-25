@@ -159,7 +159,22 @@ The 5 % round 2 added over round 1 comes from the data-path commits, not the gra
 the tree and still does nothing. This is exactly the class of error a judge has to catch by construction — the
 agent's own account of its work is not evidence.
 
-## 7. Why it stops here
+## 7. End-to-end validation
+
+Both trees trained for 200 steps from the same seed (42) on the slice, through the same entrypoint, with the
+optimized tree's speedups active. Per-step loss, reference vs candidate:
+
+| | step 10 | step 50 | step 100 | mean, steps 150–199 |
+|---|---|---|---|---|
+| `train_loss`, reference | 3.9173 | 3.4455 | 3.1551 | 1.9672 |
+| `train_loss`, candidate | 3.9173 | 3.4455 | 3.1549 | 1.9745 |
+| `decoder_loss`, reference | 7.8730 | 3.3730 | 5.0768 | 3.1274 |
+| `decoder_loss`, candidate | 7.8729 | 3.3730 | 5.0764 | 3.1213 |
+
+Over the last 50 steps the two runs sit 0.37 % (`train_loss`) and 0.19 % (`decoder_loss`) apart — the scale of
+the run-to-run variation this host produces, not a divergence. Training is not perturbed by the optimization.
+
+## 8. Why it stops here
 
 With the graph not running, the step is: eager `training_step` + a compiled backbone + the fast data path.
 GPU kernels are ~131 ms of a ~178 ms step; the remainder is the eager clip and Adam (the harness's step counter
@@ -169,7 +184,7 @@ Directions measured and rejected: Adam inside a graph (slower, breaks the step c
 graph (~195 ms), compiling the whole forward (1.99x), `max-autotune`, and Adam `capturable=True` (10.97 vs
 9.15 ms — and it is what the capture would need).
 
-## 8. Reproducing
+## 9. Reproducing
 
 ```bash
 git clone https://github.com/YHDGD5/Faster-State && cd Faster-State
