@@ -15,9 +15,9 @@ This repository is the case package. The large frozen assets live on Hugging Fac
 | warm run | `e91612c` | 0.1789 | 0.360–0.369 | 2.02–2.08x | worst z 16.35, 27/30 outside — fails |
 
 The two runs' speeds are real; their trees contain `torch.compile`, which is a real numerical change, not a
-tail event. Fifteen percent of their comparisons against the reference's own ten-repeat spread sit beyond
-3 sigma, against 0.4 % for the reference itself; their median z is 5.5x the reference's. In absolute terms the
-shift is small — at most 2.6e-4 relative on a parameter statistic — but it is systematic, and it is the part of
+tail event. 13–15 % of their comparisons against the reference's own ten-repeat spread sit beyond 3 sigma,
+against 0.4 % for the reference itself; their median z is 5.5x the reference's. In absolute terms the shift is
+small — at most 2.9e-4 relative on a parameter statistic — but it is systematic, and it is the part of
 the speedup the gate will not certify. The certified tree is the same data-path work with the compile disabled
 — one line in each of `utils.py` and `state_transition.py`. Both compiled trees stay in the repository as
 `round-1` and `round-2` so the call can be re-checked.

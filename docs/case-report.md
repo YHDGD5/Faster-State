@@ -151,10 +151,10 @@ This is the case's central result, and it is not the one the run's own work log 
 reference's — median z 0.08 against 0.07 — and 0.07 % of its comparisons sit beyond 3 sigma, against the
 reference's own 0.4 %. No step of any seed is outside the bound.
 
-**`torch.compile` is not, and the gap is not marginal.** Around one comparison in seven sits beyond 3 sigma —
-eight times the worst the reference ever produced in leave-one-out — and the median z is 5.5 times the
+**`torch.compile` is not, and the gap is not marginal.** 13–15 % of its comparisons sit beyond 3 sigma —
+seven to eight times the worst the reference ever produced in leave-one-out — and the median z is 5.5 times the
 reference's. `round-2` is the same to two decimal places, and its CUDA graph never ran (section 6), so this is
-the compiled blocks, not the graph. In absolute terms the shift is at most 2.6e-4 relative, but it is systematic
+the compiled blocks, not the graph. In absolute terms the shift is at most 2.9e-4 relative, but it is systematic
 rather than a tail event, and a judge whose job is to separate an optimization from a different computation has
 to call it.
 

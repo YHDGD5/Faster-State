@@ -13,11 +13,18 @@ case reports went **down** from N0 to N1 as a result.
 | verdict | evaluator sha256 (first 12) | tree source_digest |
 |---|---|---|
 | round 1, 1.8848x | `65cec29c4023` | `825a070b8c0b8491…` — commit `4b0d91d` |
-| round 2, 2.0153–2.0797x | `65cec29c4023` | `4e0a3577fcbaf938…` — commit `e91612c` |
+| round 2, 2.0153–2.0797x | `65cec29c4023` | `4cf4e2bdc0af1a5c…` — commit `e91612c` |
 | **certified, 1.6751x** | this version | `dac3e78d826b381f…` — commit `b438d76` |
 
 `65cec29c4023` is the frozen judge both runs were measured by. The values of the runs belong to it, and remain
 comparable with each other.
+
+One caveat on the certified row, checked against the run artifacts rather than asserted: the published commit
+`b438d76` hashes to `b272393a6cb2f00a…`, and the tree the recordings were made on hashes to `dac3e78d826b381f…`.
+The two differ by the wording of the comment beside the two `if False:` lines that disable `torch.compile`, and
+in nothing else. Every `check` run of the certified tree records `dac3e78d…` (`runs/nc_final`, `runs/nc_official`,
+`runs/nocompile`); `diff -rq` between the branch and that tree lists those two files, and `diff -u` those two
+lines. The digests are published so the difference can be checked, not so it can be waved away.
 
 ## What was wrong
 
