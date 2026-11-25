@@ -10,14 +10,23 @@ This repository is the case package. The large frozen assets live on Hugging Fac
 
 | tree | commit | candidate | live reference | speedup | trajectory gate |
 |---|---|---|---|---|---|
-| **certified — the number this case lists** | **`b438d76`** | 0.2215 | 0.371 | **1.675x** | **2.13, passes** |
-| cold run | `4b0d91d` | 0.1883 | 0.355 | 1.885x | 4.14, fails |
-| warm run | `e91612c` | 0.1789 | 0.360–0.369 | 2.02–2.08x | 5.32, fails |
+| **certified — the number this case lists** | **`b438d76`** | 0.2215 | 0.371 | **1.675x** | **worst z 3.00, 0/30 steps outside — passes** |
+| cold run | `4b0d91d` | 0.1883 | 0.355 | 1.885x | worst z 16.05, 27/30 outside — fails |
+| warm run | `e91612c` | 0.1789 | 0.360–0.369 | 2.02–2.08x | worst z 16.35, 27/30 outside — fails |
 
-The two runs' speeds are real; their trees contain `torch.compile`, which lands just outside the trajectory
-gate's calibrated bound (3.51). The certified tree is the same data-path work with the compile disabled — one
-line in each of `utils.py` and `state_transition.py`. Both compiled trees stay in the repository as `round-1`
-and `round-2` so the call can be re-checked.
+The two runs' speeds are real; their trees contain `torch.compile`, which is a real numerical change, not a
+tail event. Fifteen percent of their comparisons against the reference's own ten-repeat spread sit beyond
+3 sigma, against 0.4 % for the reference itself; their median z is 5.5x the reference's. In absolute terms the
+shift is small — at most 2.6e-4 relative on a parameter statistic — but it is systematic, and it is the part of
+the speedup the gate will not certify. The certified tree is the same data-path work with the compile disabled
+— one line in each of `utils.py` and `state_transition.py`. Both compiled trees stay in the repository as
+`round-1` and `round-2` so the call can be re-checked.
+
+The bound they are judged against is **calibrated on the reference itself**: leave-one-out over the 30
+reference recordings puts the reference's own worst z between 2.19 and 6.10, so a per-comparison 3 sigma
+rejects the reference 97 % of the time. The frozen threshold is the smallest one at which the reference
+passes 95 % of its own checks — **6.11**. At that threshold the reference sits at 0.4 % of comparisons beyond
+3 sigma and a median z of 0.07; the certified tree at 0.07 % and 0.08; `round-1` at 15.4 % and 0.39.
 
 Three denominators appear in this repository and they are not interchangeable:
 
@@ -77,7 +86,7 @@ The judge was tested against three known-wrong candidates before it was trusted:
 | candidate | expected | observed |
 |---|---|---|
 | unmodified reference | no benefit | `UNAVAILABLE` / `no_benefit`, 0.9384x |
-| **control arm on the optimized tree, `lr x 1.02`** | gate 4 | _pending_ |
+| **control arm on the optimized tree, `lr x 1.02`** | gate 4 | `different`: worst z 1864.96, 28/30 outside |
 | control arm on the reference, `lr x 1.02` | gate 1 (1.03x is not a speedup) | `UNAVAILABLE` / `no_benefit` |
 | tampered frozen file | gate 0 | `ERROR` at structure |
 | pristine reference | pass | `PASS` |

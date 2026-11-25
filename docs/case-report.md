@@ -45,19 +45,25 @@ never exercised by any gate.
 
 **Gate 4 (trajectory, statistical).** `state tx train` at three seeds for 12 steps, recording a fixed sample of
 the optimizer's parameters after each step. The timed path is not bitwise reproducible — flash attention's
-backward accumulates with atomics, so two runs of the *same* tree at the same seed differ from the second step
-on — so the question is whether the candidate stays within a measured tolerance of the reference. The tolerance
-is calibrated against a candidate known to do different work:
+backward accumulates with atomics — so the question is whether the candidate stays inside the reference's own
+measured spread. The bound is frozen from **ten repeats of the reference per seed**, before any candidate is
+recorded.
 
-| | worst relative deviation (30 step-seeds) |
-|---|---|
-| the candidate | 6.7e-3 |
-| control arm, learning rate x 1.02 | 2.3e-1 |
+Each comparison is a z score: the deviation of one recorded statistic from the reference mean, divided by the
+reference's own standard deviation for that statistic at that step. Compared are the L2 norm and the largest
+magnitude of each of 24 sampled parameter tensors, plus every logged loss that is an output rather than a
+diagnostic.
 
-The tolerance is 1e-2, which sits in that gap. This control arm is a calibration of the tolerance, not an
-end-to-end gate rejection: in a full check it is stopped earlier — at the benefit gate, since a 2 % learning
-rate change is not a measurable speedup, and on the record path by its `invariants`. Anyone repeating the check
-can reproduce the 2.3e-1 with `bench/traj_compare.py` over that arm's recordings.
+The threshold is not 3. A per-comparison 3 sigma applied to the worst of ~1500 comparisons is not a 3 sigma
+event, and it rejects the reference itself: leave-one-out over the 30 reference recordings puts the reference's
+own worst z between 2.19 and 6.10, and a three-seed check of the reference passes a 3.0 bound only **3 %** of
+the time. The frozen threshold is the smallest value at which the reference passes 95 % of its own checks:
+**6.11**. The reference is the gate's positive control and is reported next to the `lr x 1.02` arm.
+
+The maximum of many comparisons is a tail statistic, and its threshold is estimated from few draws. The gate
+therefore reports two statistics that do not take a maximum — the median z and the share of comparisons beyond
+3 sigma — with a bound set at the worst value the reference itself produced (1.8 %). The verdict requires both
+checks; on every arm below they agree.
 
 ## 3. The judge was tested against known-wrong candidates
 
@@ -94,6 +100,14 @@ never looked at.
 8. **The sandbox hid `$HOME`, where the interpreter lived.** The first optimization run could not find Python.
 9. **The bench could not run the harness's own check.** `judge.sh` calls `check --final`; the bench rejected
    the flag. Added, with a `task/final-evaluation` marker the candidate cannot create.
+10. **The loader dropped the statistics the judge was reading.** When the judged statistic moved from a tensor
+   *sum* to the L2 norm and largest magnitude, `components()` was updated and `load()` was not: the loader still
+   carried only `sums` and the logged losses, while `components()` looked for `norms` and `absmax`, found none
+   and skipped them. Gate 4 silently compared two loss scalars per step and **none of the 24 parameter tensors**.
+   It made every verdict look milder and every calibration look tighter than they were: the reference's own
+   leave-one-out worst z appeared to be 0.94–3.50 with a threshold of 3.51, where the full statistic gives
+   2.19–6.10 and 6.11. The defect was found by a reviewer who could not reproduce the published calibration.
+   Fixed, the frozen bound regenerated, and the judge now reports what it actually compared.
 
 ## 5. Results
 
@@ -114,40 +128,48 @@ gate 1 divides by; 0.355–0.386 s/iteration, 11 % spread on this shared host), 
 
 ### What the trajectory gate says about each tree
 
-The gate records `state tx train` at three seeds for 12 steps and compares each run against a bound frozen from
-**ten repeats of the reference per seed** — 3σ per (step, component), written before any candidate was recorded.
-The judged statistics are the L2 norm and the largest magnitude of 24 sampled parameter tensors, plus the
-model's loss scalars.
+The gate records `state tx train` at three seeds for 12 steps and compares each run against the bound of
+section 2 — z per (step, component) against ten repeats of the reference per seed, threshold 6.11, written
+before any candidate was recorded.
 
-**The threshold is calibrated, not assumed.** A per-comparison 3σ applied to the worst of ~1500 comparisons
-rejects the reference itself: leave-one-out over the 30 reference recordings (freeze on nine, judge the tenth)
-puts the reference's own three-seed worst z anywhere from 2.2 to 3.5, so at 3.0 the reference passes only 81 %
-of full checks. The frozen threshold is the smallest value at which a three-seed check of the reference passes
-95 % of the time — **3.51** on this sample. The reference is the gate's positive control, reported next to the
-`lr x 1.02` arm.
+| tree | speedup | worst z | steps outside | median z | beyond 3σ | verdict |
+|---|---|---|---|---|---|---|
+| **data path only, no compile (`b438d76`)** | **1.675x** | **3.00** | **0 / 30** | **0.08** | **0.07 %** | **equivalent** |
+| data path + `torch.compile` (`4b0d91d`) | 1.885–1.934x | 16.05 | 27 / 30 | 0.39 | 15.4 % | different |
+| data path + compile + graph (`e91612c`) | 2.02–2.16x | 16.35 | 27 / 30 | 0.40 | 13.7 % | different |
+| control: `lr x 1.02` from step 5 | 1.937x | **1864.96** | 28 / 30 | 2.51 | 47.1 % | different |
+| reference, leave-one-out (positive control) | — | 2.19–6.10 | 0 / 10 per seed | 0.07 | 0.4 % | passes at 6.11 |
 
-| tree | speedup | worst z | outside 3.51 | verdict |
-|---|---|---|---|---|
-| **data path only, no compile (`b438d76`)** | **1.675x** | **2.13** | **0 / 30** | **equivalent** |
-| data path + `torch.compile` (`4b0d91d`) | 1.885–1.934x | 4.14 | 2 / 30 | different |
-| data path + compile + graph (`e91612c`) | 2.02–2.16x | 5.32 | 4 / 30 | different |
-| control: `lr x 1.02` from step 5 | 1.937x | **1864.96** | 18 / 30 | different |
-
-Recordings: reference 10 per seed, three seeds; each arm 1 per seed, three seeds. All in `bench/traj/`.
+Recordings: reference 10 per seed, three seeds; each arm 1 per seed, three seeds. All in `bench/traj/`, with
+each arm's judge report beside it. In absolute terms the deviations behind the z column are small: the
+reference's own held-out runs move a statistic by a median of 7.7e-8 relative, the certified tree by 8.4e-8,
+`round-1` by 4.3e-7 and the control arm by 2.8e-6.
 
 This is the case's central result, and it is not the one the run's own work log claimed.
 
-**The data-path work is numerically equivalent.** It passes with no step outside the calibrated bound.
+**The data-path work is numerically equivalent.** Its typical comparison is indistinguishable from the
+reference's — median z 0.08 against 0.07 — and 0.07 % of its comparisons sit beyond 3 sigma, against the
+reference's own 0.4 %. No step of any seed is outside the bound.
 
-**`torch.compile` is not** — at this calibration. Its 4.14 and 5.32 sit just above 3.51 and just above the
-reference's own worst leave-one-out value (3.50), while the control arm sits three orders of magnitude further
-out. It is a marginal call, not a clear one, and it is reported as marginal: the two compiled trees are kept as
-`round-1` and `round-2` so anyone can re-judge them.
+**`torch.compile` is not, and the gap is not marginal.** Around one comparison in seven sits beyond 3 sigma —
+eight times the worst the reference ever produced in leave-one-out — and the median z is 5.5 times the
+reference's. `round-2` is the same to two decimal places, and its CUDA graph never ran (section 6), so this is
+the compiled blocks, not the graph. In absolute terms the shift is at most 2.6e-4 relative, but it is systematic
+rather than a tail event, and a judge whose job is to separate an optimization from a different computation has
+to call it.
 
-Three things about the measurement itself had to be fixed to reach that table, all recorded in
+**The control arm** is another two orders of magnitude out, which is the evidence that the gate separates
+"different work" from "same work, different scheduling" rather than rejecting everything that is not bitwise
+identical.
+
+Four things about the measurement itself had to be fixed to reach that table, all recorded in
 `task/judge_changes.md`: the judged statistic was initially a plain sum, which is ill-conditioned — cancellation
-turned a 1e-6 difference into a 213σ reading; the bound was initially estimated from three repeats, which does
-not pin σ down; and the threshold is now calibrated against held-out reference runs instead of assumed at 3σ.
+turned a 1e-6 difference into a 213 sigma reading; the bound was initially estimated from three repeats, which
+does not pin sigma down; the threshold is calibrated against held-out reference runs instead of assumed at
+3 sigma; and the loader was not carrying the parameter statistics the judge was reading, so the first
+calibrated table compared only the loss scalars. That last defect is item 10 of section 4; it made the
+compiled trees look marginal when they are not, and it is the reason the published threshold was 3.51 rather
+than 6.11.
 
 ## 6. What the runs found
 

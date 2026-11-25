@@ -38,7 +38,8 @@ def load(dirs):
             m = json.loads(p.read_text())
             if m.get('status') != 'ok':
                 continue
-            steps = {s['step']: {'sums': s['sums'], 'losses': s.get('losses') or {}}
+            steps = {s['step']: {'sums': s.get('sums') or [], 'norms': s.get('norms') or [],
+                                 'absmax': s.get('absmax') or [], 'losses': s.get('losses') or {}}
                      for s in m['steps'] if not s['warmup']}
             if steps:
                 runs[m['seed']].append(steps)
@@ -79,6 +80,26 @@ def bound_from(reps):
     return steps
 
 
+def z_list(hold, steps):
+    """Every per-comparison z of one recording against a bound, not just the largest."""
+    mag = {}
+    for stp in steps.values():
+        for name, e in stp.items():
+            mag[name] = max(mag.get(name, 0.0), abs(e['mean']))
+    out = []
+    for st, entry in hold.items():
+        ref = steps[str(st)]
+        for name, v in components(entry).items():
+            e = ref.get(name)
+            if e is None:
+                continue
+            scale = max(e['sigma'], REL_FLOOR * mag.get(name, 0.0))
+            if scale <= 0:
+                continue
+            out.append(abs(v - e['mean']) / scale)
+    return out
+
+
 def worst_z(hold, steps):
     """The largest per-comparison z of one recording against a bound."""
     mag = {}
@@ -108,7 +129,7 @@ def calibrate_leave_one_out(runs, target_pass):
     repeat; then a full check draws one such worst-z per seed and the verdict is the largest of the three. The
     threshold is the smallest value at which that three-seed draw passes `target_pass` of the time.
     """
-    loo = {}
+    loo, dist = {}, []
     for seed, reps in sorted(runs.items()):
         if len(reps) < 4:
             continue
@@ -116,10 +137,18 @@ def calibrate_leave_one_out(runs, target_pass):
         for i in range(len(reps)):
             hold = reps[i]
             rest = [r for j, r in enumerate(reps) if j != i]
-            vals.append(worst_z(hold, bound_from(rest)))
+            b = bound_from(rest)
+            vals.append(worst_z(hold, b))
+            dist.append(z_list(hold, b))
         loo[seed] = sorted(vals)
     if len(loo) < 2:
         sys.exit('need at least two seeds with four repeats each to calibrate')
+    # The same held-out runs, summarised by two statistics that do not take a maximum: how large the typical
+    # comparison is, and what share of comparisons sit beyond 3 sigma. The maximum of ~1500 comparisons is a
+    # tail statistic and its threshold is estimated from few draws; these are tight and stable, and are
+    # reported next to it as a corroborating check. The bound is the worst the reference itself ever produced.
+    med = sorted(statistics.median(z) for z in dist)
+    frac = sorted(sum(1 for v in z if v > 3.0) / len(z) for z in dist)
     draws = [max(v) for v in itertools.product(*[loo[s] for s in sorted(loo)])]
     draws.sort()
     thr = None
@@ -132,7 +161,14 @@ def calibrate_leave_one_out(runs, target_pass):
                             'p95': round(draws[int(len(draws) * 0.95)], 2),
                             'max': round(draws[-1], 2)},
             'leave_one_out': {str(s): [round(x, 2) for x in v] for s, v in loo.items()},
-            'reference_pass_at_3sigma': round(sum(1 for d in draws if d <= K) / len(draws), 3)}
+            'reference_pass_at_3sigma': round(sum(1 for d in draws if d <= K) / len(draws), 3),
+            'dist': {'median_z': {'p50': round(med[len(med) // 2], 2),
+                                  'p95': round(med[int(len(med) * 0.95)], 2),
+                                  'max': round(med[-1], 2)},
+                     'frac_over_3sigma': {'p50': round(frac[len(frac) // 2], 4),
+                                          'p95': round(frac[int(len(frac) * 0.95)], 4),
+                                          'max': round(frac[-1], 4)}},
+            'dist_bound': round(frac[-1], 4)}
 
 
 def freeze(ap):
@@ -179,7 +215,7 @@ def judge(ap):
     if not cand:
         sys.exit('no candidate recordings')
 
-    rows, worst = [], None
+    rows, worst, allz = [], None, []
     for seed, reps in sorted(cand.items()):
         ref = frozen['seeds'].get(str(seed))
         if not ref:
@@ -209,6 +245,7 @@ def judge(ap):
                     if scale <= 0.0:
                         scale = float('inf') if v == e['mean'] else 0.0
                     zi = abs(v - e['mean']) / scale if scale else float('inf')
+                    allz.append(zi)
                     if zi > z:
                         z, detail = zi, {'component': name, 'value': v, 'ref_mean': e['mean'],
                                          'ref_sigma': e['sigma']}
@@ -217,9 +254,15 @@ def judge(ap):
                 if worst is None or z > worst[0]:
                     worst = (z, seed, st, detail)
 
+    frac = sum(1 for v in allz if v > 3.0) / len(allz) if allz else 0.0
+    med = statistics.median(allz) if allz else 0.0
+    dist_bound = (frozen.get('calibration') or {}).get('dist_bound')
+    dist_ok = None if dist_bound is None else frac <= dist_bound
     bad = [r for r in rows if r.get('within') is False]
-    verdict = 'equivalent' if not bad else 'different'
+    verdict = 'equivalent' if (not bad and dist_ok is not False) else 'different'
     rep = {'schema': 'bench-trajectory-report@2', 'k': k,
+           'distribution': {'median_z': round(med, 2), 'frac_over_3sigma': round(frac, 4),
+                            'reference_frac_over_3sigma_max': dist_bound, 'within': dist_ok},
            'candidate': [str(Path(d).resolve()) for d in ap.cand],
            'verdict': verdict, 'steps_compared': len([r for r in rows if 'step' in r]),
            'steps_outside': len(bad),
@@ -229,7 +272,8 @@ def judge(ap):
            'rows': rows}
     if ap.out:
         Path(ap.out).write_text(json.dumps(rep, indent=1) + '\n')
-    print(json.dumps({x: rep[x] for x in ('verdict', 'steps_compared', 'steps_outside', 'worst_z', 'worst_at')}))
+    print(json.dumps({x: rep[x] for x in ('verdict', 'steps_compared', 'steps_outside', 'worst_z',
+                                           'worst_at', 'distribution')}))
     return 0 if verdict == 'equivalent' else 1
 
 

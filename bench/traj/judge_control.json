@@ -1,0 +1,414 @@
+{
+ "schema": "bench-trajectory-report@2",
+ "k": 6.11,
+ "distribution": {
+  "median_z": 2.51,
+  "frac_over_3sigma": 0.4713,
+  "reference_frac_over_3sigma_max": 0.018,
+  "within": false
+ },
+ "candidate": [
+  "/data/fy/state-rba/work/state/ws/bench/traj/cand_control"
+ ],
+ "verdict": "different",
+ "steps_compared": 30,
+ "steps_outside": 28,
+ "worst_z": 1864.96,
+ "worst_at": {
+  "seed": 43,
+  "step": 9,
+  "component": "loss/decoder_loss"
+ },
+ "rows": [
+  {
+   "seed": 42,
+   "repeat": 0,
+   "step": 2,
+   "z": 7.03,
+   "within": false,
+   "worst_component": {
+    "component": "absmax15",
+    "value": 0.08808160573244095,
+    "ref_mean": 0.0880822293460369,
+    "ref_sigma": 8.199776823331105e-08
+   }
+  },
+  {
+   "seed": 42,
+   "repeat": 0,
+   "step": 3,
+   "z": 8.28,
+   "within": false,
+   "worst_component": {
+    "component": "absmax22",
+    "value": 0.02272242121398449,
+    "ref_mean": 0.022722638584673403,
+    "ref_sigma": 2.6254561709006468e-08
+   }
+  },
+  {
+   "seed": 42,
+   "repeat": 0,
+   "step": 4,
+   "z": 7.73,
+   "within": false,
+   "worst_component": {
+    "component": "absmax15",
+    "value": 0.0882316455245018,
+    "ref_mean": 0.08823237121105194,
+    "ref_sigma": 9.386286001912499e-08
+   }
+  },
+  {
+   "seed": 42,
+   "repeat": 0,
+   "step": 5,
+   "z": 580.07,
+   "within": false,
+   "worst_component": {
+    "component": "norm2",
+    "value": 0.009267594053492024,
+    "ref_mean": 0.009247931365029707,
+    "ref_sigma": 3.389705952939832e-08
+   }
+  },
+  {
+   "seed": 42,
+   "repeat": 0,
+   "step": 6,
+   "z": 912.59,
+   "within": false,
+   "worst_component": {
+    "component": "norm2",
+    "value": 0.0101147752689955,
+    "ref_mean": 0.010076998910298212,
+    "ref_sigma": 4.139483157994957e-08
+   }
+  },
+  {
+   "seed": 42,
+   "repeat": 0,
+   "step": 7,
+   "z": 1096.11,
+   "within": false,
+   "worst_component": {
+    "component": "norm2",
+    "value": 0.010892879356270065,
+    "ref_mean": 0.010838360388535685,
+    "ref_sigma": 4.97385376989127e-08
+   }
+  },
+  {
+   "seed": 42,
+   "repeat": 0,
+   "step": 8,
+   "z": 1294.68,
+   "within": false,
+   "worst_component": {
+    "component": "norm2",
+    "value": 0.011629928219077908,
+    "ref_mean": 0.011560452377417261,
+    "ref_sigma": 5.3662612346293556e-08
+   }
+  },
+  {
+   "seed": 42,
+   "repeat": 0,
+   "step": 9,
+   "z": 1402.69,
+   "within": false,
+   "worst_component": {
+    "component": "norm2",
+    "value": 0.012313070241014003,
+    "ref_mean": 0.012232237986733386,
+    "ref_sigma": 5.762675228129062e-08
+   }
+  },
+  {
+   "seed": 42,
+   "repeat": 0,
+   "step": 10,
+   "z": 1346.59,
+   "within": false,
+   "worst_component": {
+    "component": "norm2",
+    "value": 0.012929685007663037,
+    "ref_mean": 0.012840476327996878,
+    "ref_sigma": 6.624807191052638e-08
+   }
+  },
+  {
+   "seed": 42,
+   "repeat": 0,
+   "step": 11,
+   "z": 1708.72,
+   "within": false,
+   "worst_component": {
+    "component": "loss/decoder_loss",
+    "value": 7.220638275146484,
+    "ref_mean": 7.249570751190186,
+    "ref_sigma": 1.3449099791036673e-05
+   }
+  },
+  {
+   "seed": 43,
+   "repeat": 0,
+   "step": 2,
+   "z": 15.2,
+   "within": false,
+   "worst_component": {
+    "component": "norm8",
+    "value": 0.5735478423902622,
+    "ref_mean": 0.5735391166431374,
+    "ref_sigma": 2.126338008731962e-08
+   }
+  },
+  {
+   "seed": 43,
+   "repeat": 0,
+   "step": 3,
+   "z": 15.26,
+   "within": false,
+   "worst_component": {
+    "component": "norm8",
+    "value": 0.5736428580455961,
+    "ref_mean": 0.5736340991678985,
+    "ref_sigma": 2.7933794499158598e-08
+   }
+  },
+  {
+   "seed": 43,
+   "repeat": 0,
+   "step": 4,
+   "z": 15.3,
+   "within": false,
+   "worst_component": {
+    "component": "norm8",
+    "value": 0.5737301721577266,
+    "ref_mean": 0.5737213894541926,
+    "ref_sigma": 3.515766201408454e-08
+   }
+  },
+  {
+   "seed": 43,
+   "repeat": 0,
+   "step": 5,
+   "z": 436.82,
+   "within": false,
+   "worst_component": {
+    "component": "norm2",
+    "value": 0.008883419675107945,
+    "ref_mean": 0.008865570918733487,
+    "ref_sigma": 4.086093738385634e-08
+   }
+  },
+  {
+   "seed": 43,
+   "repeat": 0,
+   "step": 6,
+   "z": 904.27,
+   "within": false,
+   "worst_component": {
+    "component": "norm1",
+    "value": 0.008227987935404565,
+    "ref_mean": 0.008200807579505092,
+    "ref_sigma": 3.005769075294845e-08
+   }
+  },
+  {
+   "seed": 43,
+   "repeat": 0,
+   "step": 7,
+   "z": 1330.8,
+   "within": false,
+   "worst_component": {
+    "component": "norm1",
+    "value": 0.008795374436171942,
+    "ref_mean": 0.008755813683060814,
+    "ref_sigma": 2.972700016264978e-08
+   }
+  },
+  {
+   "seed": 43,
+   "repeat": 0,
+   "step": 8,
+   "z": 1543.03,
+   "within": false,
+   "worst_component": {
+    "component": "norm1",
+    "value": 0.009335662786774926,
+    "ref_mean": 0.009284601794268835,
+    "ref_sigma": 3.3091474169816124e-08
+   }
+  },
+  {
+   "seed": 43,
+   "repeat": 0,
+   "step": 9,
+   "z": 1864.96,
+   "within": false,
+   "worst_component": {
+    "component": "loss/decoder_loss",
+    "value": 10.776434898376465,
+    "ref_mean": 10.80971908569336,
+    "ref_sigma": 1.288931206557801e-05
+   }
+  },
+  {
+   "seed": 43,
+   "repeat": 0,
+   "step": 10,
+   "z": 1790.17,
+   "within": false,
+   "worst_component": {
+    "component": "loss/decoder_loss",
+    "value": 7.685729026794434,
+    "ref_mean": 7.717678356170654,
+    "ref_sigma": 1.5575382931180186e-05
+   }
+  },
+  {
+   "seed": 43,
+   "repeat": 0,
+   "step": 11,
+   "z": 1792.46,
+   "within": false,
+   "worst_component": {
+    "component": "norm2",
+    "value": 0.013179503065747953,
+    "ref_mean": 0.013081369295337267,
+    "ref_sigma": 5.4748077896560786e-08
+   }
+  },
+  {
+   "seed": 44,
+   "repeat": 0,
+   "step": 2,
+   "z": 5.34,
+   "within": true,
+   "worst_component": {
+    "component": "norm6",
+    "value": 0.5859363953000568,
+    "ref_mean": 0.5859332649996598,
+    "ref_sigma": 2.143382970007565e-08
+   }
+  },
+  {
+   "seed": 44,
+   "repeat": 0,
+   "step": 3,
+   "z": 8.86,
+   "within": false,
+   "worst_component": {
+    "component": "absmax2",
+    "value": 0.0003968179225921631,
+    "ref_mean": 0.00039682895876467226,
+    "ref_sigma": 1.2451542501450458e-09
+   }
+  },
+  {
+   "seed": 44,
+   "repeat": 0,
+   "step": 4,
+   "z": 5.5,
+   "within": true,
+   "worst_component": {
+    "component": "norm6",
+    "value": 0.5859085419879254,
+    "ref_mean": 0.5859053176521366,
+    "ref_sigma": 3.287798007438433e-08
+   }
+  },
+  {
+   "seed": 44,
+   "repeat": 0,
+   "step": 5,
+   "z": 577.11,
+   "within": false,
+   "worst_component": {
+    "component": "norm2",
+    "value": 0.008946111658710478,
+    "ref_mean": 0.008927658024188958,
+    "ref_sigma": 3.1976135771636925e-08
+   }
+  },
+  {
+   "seed": 44,
+   "repeat": 0,
+   "step": 6,
+   "z": 844.52,
+   "within": false,
+   "worst_component": {
+    "component": "norm2",
+    "value": 0.009804542186742775,
+    "ref_mean": 0.00976755176254746,
+    "ref_sigma": 4.380050897935419e-08
+   }
+  },
+  {
+   "seed": 44,
+   "repeat": 0,
+   "step": 7,
+   "z": 1072.12,
+   "within": false,
+   "worst_component": {
+    "component": "norm2",
+    "value": 0.010613524033207245,
+    "ref_mean": 0.010559829299291057,
+    "ref_sigma": 5.008266630927831e-08
+   }
+  },
+  {
+   "seed": 44,
+   "repeat": 0,
+   "step": 8,
+   "z": 1201.89,
+   "within": false,
+   "worst_component": {
+    "component": "loss/decoder_loss",
+    "value": 9.411081314086914,
+    "ref_mean": 9.441340827941895,
+    "ref_sigma": 2.517652029482257e-05
+   }
+  },
+  {
+   "seed": 44,
+   "repeat": 0,
+   "step": 9,
+   "z": 1145.12,
+   "within": false,
+   "worst_component": {
+    "component": "norm2",
+    "value": 0.012126001728636045,
+    "ref_mean": 0.012046221848005445,
+    "ref_sigma": 6.966972289191788e-08
+   }
+  },
+  {
+   "seed": 44,
+   "repeat": 0,
+   "step": 10,
+   "z": 1810.29,
+   "within": false,
+   "worst_component": {
+    "component": "loss/decoder_loss",
+    "value": 7.7915191650390625,
+    "ref_mean": 7.82398738861084,
+    "ref_sigma": 1.672906528268141e-05
+   }
+  },
+  {
+   "seed": 44,
+   "repeat": 0,
+   "step": 11,
+   "z": 1863.74,
+   "within": false,
+   "worst_component": {
+    "component": "loss/decoder_loss",
+    "value": 7.313336372375488,
+    "ref_mean": 7.346763229370117,
+    "ref_sigma": 1.2162827220334503e-05
+   }
+  }
+ ]
+}

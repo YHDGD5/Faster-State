@@ -82,39 +82,72 @@ This is a change of *what is measured*, not of the threshold: the bound is still
 repeats, still frozen before any candidate is recorded. The table below gives both statistics on the same arms,
 so the effect of the change is visible rather than asserted.
 
-| arm | sum-based z | norm-based z | verdict |
+| arm | sum-based z | norm-based z, as measured then | norm-based z, corrected (fifth change) |
 |---|---|---|---|
-| certified tree (`b438d76`) | 213 | **1.86** | equivalent |
-| round-1 tree (`4b0d91d`) | 213 | 4.14 | different (3 of 30 steps) |
-| round-2 tree (`e91612c`) | 216 | 5.32 | different (4 of 30) |
-| control, `lr x 1.02` from step 5 | 1865 | **1864.96** | different (19 of 30) |
+| certified tree (`b438d76`) | 213 | 1.86 | **3.00** — equivalent |
+| round-1 tree (`4b0d91d`) | 213 | 4.14 | 16.05 — different, 27 of 30 steps |
+| round-2 tree (`e91612c`) | 216 | 5.32 | 16.35 — different, 27 of 30 |
+| control, `lr x 1.02` from step 5 | 1865 | **1864.96** | **1864.96** — different, 28 of 30 |
 
-The sum-based column is what the first version judged, and it is why the first version rejected every arm.
+The sum-based column is what the first version judged, and it is why the first version rejected every arm. The
+middle column is what the second change was believed to measure at the time; it was in fact loss-only (see the
+fifth change), and the right-hand column is the same statistic after that defect was fixed. The control arm is
+unchanged because its worst comparison is a loss, which was being compared all along.
 
 ## The repeats (third change, same review)
 
 Three repeats per seed leave sigma itself uncertain by ~50 %. The same arm measured 2.82 sigma in one
 recording and 3.96 sigma in another -- 29 of 30 step-seeds inside the bound, one outside, the verdict flipping
-on a single component. The bound now uses **ten repeats per seed** (thirty recordings, three seeds), which puts
-that arm at 1.86 sigma with no step outside. The rule is unchanged: 3 sigma of the reference's own repeats,
-frozen before any candidate is recorded.
+on a single component. The bound now uses **ten repeats per seed** (thirty recordings, three seeds). The rule is
+unchanged: the reference's own repeats, frozen before any candidate is recorded.
 
 ## The threshold is calibrated, not assumed (fourth change, same review)
 
 A per-comparison 3 sigma applied to the worst of ~1500 comparisons is not a 3 sigma event. Leave-one-out over
 the 30 reference recordings -- freeze the bound on nine repeats of a seed, judge the tenth -- puts the
-reference's own worst z anywhere from 0.94 to 3.50:
+reference's own worst z anywhere from 2.19 to 6.10:
 
 | seed | held-out reference worst z |
 |---|---|
-| 42 | 0.94 1.46 1.79 1.90 1.95 2.11 2.38 2.53 2.68 3.22 |
-| 43 | 1.55 1.63 1.64 1.75 1.79 1.80 1.98 2.21 2.23 2.34 |
-| 44 | 1.49 1.59 1.59 1.77 1.83 1.87 2.29 2.45 2.48 3.50 |
+| 42 | 2.60 2.75 2.75 2.80 2.85 3.18 3.25 3.47 3.64 6.10 |
+| 43 | 2.19 2.57 2.60 3.35 3.43 3.54 3.58 3.76 3.98 5.25 |
+| 44 | 2.64 2.81 3.02 3.11 3.42 3.82 4.21 4.36 4.62 5.35 |
 
-A full check draws one of these per seed and takes the largest, so at 3.0 the **reference passes only 81 % of
+A full check draws one of these per seed and takes the largest, so at 3.0 the **reference passes only 3 % of
 its own checks**. The frozen threshold is the smallest value at which that three-seed draw passes 95 % of the
-time: **3.51**. `bench/traj/frozen.json` carries the whole leave-one-out table under `calibration`, and the
+time: **6.11**. `bench/traj/frozen.json` carries the whole leave-one-out table under `calibration`, and the
 reference is reported as the gate's positive control next to the `lr x 1.02` arm.
+
+The maximum of ~1500 comparisons is a tail statistic whose threshold is estimated from few draws: with seven
+repeats instead of ten the same procedure gives 9.41 rather than 6.11. The gate therefore also reports two
+statistics that do not take a maximum -- the median z and the share of comparisons beyond 3 sigma -- with a
+bound set at the worst value the reference itself produced in leave-one-out (1.8 %). The verdict requires both,
+and they agree on every arm.
+
+The numbers in this section are the corrected ones. The values first published here (0.94-3.50, threshold 3.51)
+came from a loader that was silently dropping the parameter statistics; that defect and its repair are the next
+section.
+
+## The loader dropped the statistics the judge was reading (fifth change)
+
+`traj_compare.load()` built each step entry as `{'sums': ..., 'losses': ...}`. When the second change replaced
+the sum-based statistic with the L2 norm and the largest magnitude, `components()` was updated to read
+`norms`/`absmax` and `load()` was not. `components()` therefore found neither field in any entry, skipped them,
+and gate 4 compared **the two loss scalars and nothing else**: none of the 24 sampled parameter tensors, 96 % of
+the intended comparisons.
+
+The defect was invisible in the output -- the gate printed a worst z and a verdict, and both were computed from
+what it had. It is visible in the frozen file: the bound carried two components per step where it should carry
+fifty. A reviewer reproducing the calibration against the raw recordings got a different threshold, which is how
+it was found.
+
+It moved every number in the direction of understatement. Loss scalars are the most forgiving statistic in the
+set -- they average over the whole batch and drift slowly -- so comparing only them made every arm look closer
+to the reference than it is, and made the calibrated threshold look tighter (3.51, with the reference's own
+leave-one-out at 0.94-3.50, where the full statistic gives 6.11 and 2.19-6.10).
+
+Fixed in `load()`, the bound regenerated, and `judge` now reports the component count it compared and the
+distribution statistics alongside the worst z. The corrected table is the one in the case report and the README.
 
 ## The batch gate was not working
 
