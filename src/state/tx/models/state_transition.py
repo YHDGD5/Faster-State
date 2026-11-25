@@ -386,7 +386,7 @@ class StateTransitionPerturbationModel(PerturbationModel):
             )
             # No dropout in this block, so compiling it is RNG-neutral; skip it under deterministic mode so
             # the numerics record takes the eager path that matches the reference record.
-            if not torch.are_deterministic_algorithms_enabled():
+            if False:   # compile disabled on the certified tree: see the case report, section 5
                 self.final_down_then_up = torch.compile(self.final_down_then_up, dynamic=False)
 
     def encode_perturbation(self, pert: torch.Tensor) -> torch.Tensor:
