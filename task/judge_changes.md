@@ -99,6 +99,23 @@ on a single component. The bound now uses **ten repeats per seed** (thirty recor
 that arm at 1.86 sigma with no step outside. The rule is unchanged: 3 sigma of the reference's own repeats,
 frozen before any candidate is recorded.
 
+## The threshold is calibrated, not assumed (fourth change, same review)
+
+A per-comparison 3 sigma applied to the worst of ~1500 comparisons is not a 3 sigma event. Leave-one-out over
+the 30 reference recordings -- freeze the bound on nine repeats of a seed, judge the tenth -- puts the
+reference's own worst z anywhere from 0.94 to 3.50:
+
+| seed | held-out reference worst z |
+|---|---|
+| 42 | 0.94 1.46 1.79 1.90 1.95 2.11 2.38 2.53 2.68 3.22 |
+| 43 | 1.55 1.63 1.64 1.75 1.79 1.80 1.98 2.21 2.23 2.34 |
+| 44 | 1.49 1.59 1.59 1.77 1.83 1.87 2.29 2.45 2.48 3.50 |
+
+A full check draws one of these per seed and takes the largest, so at 3.0 the **reference passes only 81 % of
+its own checks**. The frozen threshold is the smallest value at which that three-seed draw passes 95 % of the
+time: **3.51**. `bench/traj/frozen.json` carries the whole leave-one-out table under `calibration`, and the
+reference is reported as the gate's positive control next to the `lr x 1.02` arm.
+
 ## The batch gate was not working
 
 `bench/build_fixture.py` imported `cell_load` but not the tree's own `state` package, and the data-path patch is

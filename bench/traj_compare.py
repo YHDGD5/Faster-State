@@ -14,6 +14,7 @@ still shows up and a representation change does not.
 """
 import argparse
 import json
+import itertools
 import statistics
 import sys
 from collections import defaultdict
@@ -65,6 +66,75 @@ def components(entry, include_sums=False):
     return out
 
 
+def bound_from(reps):
+    """{step: {component: {mean, sigma}}} over a list of recordings of the same seed."""
+    steps = {}
+    for st in reps[0]:
+        cols = defaultdict(list)
+        for r in reps:
+            for name, v in components(r[st]).items():
+                cols[name].append(v)
+        steps[str(st)] = {n: {'mean': statistics.fmean(v), 'sigma': statistics.stdev(v)}
+                          for n, v in sorted(cols.items())}
+    return steps
+
+
+def worst_z(hold, steps):
+    """The largest per-comparison z of one recording against a bound."""
+    mag = {}
+    for stp in steps.values():
+        for name, e in stp.items():
+            mag[name] = max(mag.get(name, 0.0), abs(e['mean']))
+    worst = 0.0
+    for st, entry in hold.items():
+        ref = steps[str(st)]
+        for name, v in components(entry).items():
+            e = ref.get(name)
+            if e is None:
+                continue
+            scale = max(e['sigma'], REL_FLOOR * mag.get(name, 0.0))
+            if scale <= 0:
+                scale = float('inf') if v == e['mean'] else 0.0
+            worst = max(worst, abs(v - e['mean']) / scale if scale else float('inf'))
+    return worst
+
+
+def calibrate_leave_one_out(runs, target_pass):
+    """A threshold the reference itself passes.
+
+    Freezing a per-comparison 3 sigma and taking the worst of ~1500 comparisons rejects the reference most of
+    the time: the maximum of many comparisons is not itself a 3 sigma event. So the threshold is measured the
+    same way the verdict is taken -- leave one recording out per seed, judge it against the other nine, and
+    repeat; then a full check draws one such worst-z per seed and the verdict is the largest of the three. The
+    threshold is the smallest value at which that three-seed draw passes `target_pass` of the time.
+    """
+    loo = {}
+    for seed, reps in sorted(runs.items()):
+        if len(reps) < 4:
+            continue
+        vals = []
+        for i in range(len(reps)):
+            hold = reps[i]
+            rest = [r for j, r in enumerate(reps) if j != i]
+            vals.append(worst_z(hold, bound_from(rest)))
+        loo[seed] = sorted(vals)
+    if len(loo) < 2:
+        sys.exit('need at least two seeds with four repeats each to calibrate')
+    draws = [max(v) for v in itertools.product(*[loo[s] for s in sorted(loo)])]
+    draws.sort()
+    thr = None
+    for t in [x / 100 for x in range(100, 10001)]:
+        if sum(1 for d in draws if d <= t) / len(draws) >= target_pass:
+            thr = t
+            break
+    return {'threshold': thr, 'target_pass': target_pass, 'draws': len(draws),
+            'percentiles': {'p50': round(draws[len(draws) // 2], 2),
+                            'p95': round(draws[int(len(draws) * 0.95)], 2),
+                            'max': round(draws[-1], 2)},
+            'leave_one_out': {str(s): [round(x, 2) for x in v] for s, v in loo.items()},
+            'reference_pass_at_3sigma': round(sum(1 for d in draws if d <= K) / len(draws), 3)}
+
+
 def freeze(ap):
     runs = load(ap.ref)
     if not runs:
@@ -72,7 +142,7 @@ def freeze(ap):
     thin = {s: len(v) for s, v in runs.items() if len(v) < 3}
     for s, n in sorted(thin.items()):
         print(f'  seed {s}: {n} repeat(s), fewer than 3 -- skipped, no spread to measure', file=sys.stderr)
-    frozen = {'schema': 'bench-trajectory-frozen@1', 'k': K, 'rel_floor': REL_FLOOR,
+    frozen = {'schema': 'bench-trajectory-frozen@2', 'k': K, 'rel_floor': REL_FLOOR,
               'skipped_seeds': {str(s): n for s, n in thin.items()}, 'seeds': {}}
     for seed, reps in sorted(runs.items()):
         if len(reps) < 3:
@@ -91,14 +161,20 @@ def freeze(ap):
                     default=0.0)
         print(f'  seed {seed}: {len(reps)} repeats, {len(steps)} steps, worst sigma/|mean| {worst:.3e}',
               file=sys.stderr)
+    cal = calibrate_leave_one_out(runs, ap.target_pass)
+    frozen['calibration'] = cal
+    frozen['threshold'] = cal['threshold']
     Path(ap.out).write_text(json.dumps(frozen, indent=1) + '\n')
-    print(json.dumps({'frozen': ap.out, 'seeds': sorted(int(s) for s in frozen['seeds'])}))
+    print(json.dumps({'frozen': ap.out, 'seeds': sorted(int(s) for s in frozen['seeds']),
+                      'threshold': cal['threshold'], 'reference_passes_at_3sigma':
+                      cal['reference_pass_at_3sigma'], 'p95_draw': cal['percentiles']['p95']}))
     return 0
 
 
 def judge(ap):
     frozen = json.loads(Path(ap.frozen).read_text())
-    k, floor = frozen['k'], frozen['rel_floor']
+    floor = frozen['rel_floor']
+    k = frozen.get('threshold') or frozen['k']
     cand = load(ap.cand)
     if not cand:
         sys.exit('no candidate recordings')
@@ -163,6 +239,8 @@ def main():
     f = sub.add_parser('freeze')
     f.add_argument('--ref', action='append', required=True)
     f.add_argument('--out', required=True)
+    f.add_argument('--target-pass', type=float, default=0.95,
+                   help='how often a three-seed check of the reference must pass the frozen threshold')
     j = sub.add_parser('judge')
     j.add_argument('--frozen', required=True)
     j.add_argument('--cand', action='append', required=True)

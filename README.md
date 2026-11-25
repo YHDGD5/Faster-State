@@ -8,10 +8,16 @@ This repository is the case package. The large frozen assets live on Hugging Fac
 
 ## Result
 
-| round | tree | candidate s/iter | live reference in that check | speedup | tier |
+| tree | commit | candidate | live reference | speedup | trajectory gate |
 |---|---|---|---|---|---|
-| 1 — cold, unmodified start | `4b0d91d` | 0.1883 | 0.355 | **1.885x** | N1 |
-| 2 — warm, from round 1's tree | `e91612c` | 0.1797–0.1789 | 0.360–0.369 | **2.02–2.08x** | N1 |
+| **certified — the number this case lists** | **`b438d76`** | 0.2215 | 0.371 | **1.675x** | **2.13, passes** |
+| cold run | `4b0d91d` | 0.1883 | 0.355 | 1.885x | 4.14, fails |
+| warm run | `e91612c` | 0.1789 | 0.360–0.369 | 2.02–2.08x | 5.32, fails |
+
+The two runs' speeds are real; their trees contain `torch.compile`, which lands just outside the trajectory
+gate's calibrated bound (3.51). The certified tree is the same data-path work with the compile disabled — one
+line in each of `utils.py` and `state_transition.py`. Both compiled trees stay in the repository as `round-1`
+and `round-2` so the call can be re-checked.
 
 Three denominators appear in this repository and they are not interchangeable:
 
@@ -24,9 +30,10 @@ Three denominators appear in this repository and they are not interchangeable:
 
 The headline number is the harness's own, which is the first column's ratio.
 
-Both rounds are reported separately on purpose: round 2 begins from a tree that already carries round 1's
-changes and from a workspace that contains round 1's findings. The cold number is the one that measures an
-unassisted agent; the warm number measures how much headroom is left once the obvious work is done.
+The two runs are reported separately on purpose: the warm run begins from a tree that already carries the
+cold run's changes and from a workspace that contains its findings. The cold number measures an unassisted
+agent; the warm number measures how much headroom is left once the obvious work is done. Neither is the number
+this case lists — the certified tree is, and it is slower than both because `torch.compile` had to come out.
 
 ## The workload
 

@@ -116,7 +116,11 @@
   "repeats": 1,
   "frozen": "bench/traj/frozen.json",
   "controls": {
-   "lr_x1.02": "bench/traj/control_lr102"
+   "lr_x1.02_from_step5": "bench/traj/cand_control"
+  },
+  "recordings": {
+   "reference": "bench/traj/ref_s{seed}_r{repeat} (10 per seed, 3 seeds)",
+   "candidates": "bench/traj/cand_<tree> (1 per seed, 3 seeds)"
   }
  }
 }
