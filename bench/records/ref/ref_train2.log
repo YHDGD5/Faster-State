@@ -1,0 +1,97 @@
+[numerics-phase] rank=0 case=train2 phase=start t=1.29
+is_log1p mode is ENABLED. Detected uns/log1p metadata (example: /data/fy/state-rba/assets/data/dataset/tahoe_slice.h5ad).
+Processing datasets:   0%|          | 0/1 [00:00<?, ?it/s]Processing tahoe_slice:   0%|          | 0/1 [00:00<?, ?it/s]Processing tahoe_slice: 100%|██████████| 1/1 [00:00<00:00,  2.53it/s]Processing tahoe_slice: 100%|██████████| 1/1 [00:00<00:00,  2.53it/s, 399990 train, 0 val, 0 test]                                                                                                  StateTransitionPerturbationModel(
+  (loss_fn): SamplesLoss()
+  (gene_decoder): LatentToGeneDecoder(
+    (decoder): Sequential(
+      (0): Linear(in_features=2000, out_features=1024, bias=True)
+      (1): LayerNorm((1024,), eps=1e-05, elementwise_affine=True, bias=True)
+      (2): GELU(approximate='none')
+      (3): Dropout(p=0.1, inplace=False)
+      (4): Linear(in_features=1024, out_features=1024, bias=True)
+      (5): LayerNorm((1024,), eps=1e-05, elementwise_affine=True, bias=True)
+      (6): GELU(approximate='none')
+      (7): Dropout(p=0.1, inplace=False)
+      (8): Linear(in_features=1024, out_features=512, bias=True)
+      (9): LayerNorm((512,), eps=1e-05, elementwise_affine=True, bias=True)
+      (10): GELU(approximate='none')
+      (11): Dropout(p=0.1, inplace=False)
+      (12): Linear(in_features=512, out_features=47942, bias=True)
+      (13): ReLU()
+    )
+  )
+  (pert_encoder): Sequential(
+    (0): Linear(in_features=380, out_features=1440, bias=True)
+    (1): GELU(approximate='none')
+    (2): Dropout(p=0.1, inplace=False)
+    (3): Linear(in_features=1440, out_features=1440, bias=True)
+    (4): GELU(approximate='none')
+    (5): Dropout(p=0.1, inplace=False)
+    (6): Linear(in_features=1440, out_features=1440, bias=True)
+    (7): GELU(approximate='none')
+    (8): Dropout(p=0.1, inplace=False)
+    (9): Linear(in_features=1440, out_features=1440, bias=True)
+  )
+  (basal_encoder): Sequential(
+    (0): Linear(in_features=2000, out_features=1440, bias=True)
+    (1): GELU(approximate='none')
+    (2): Dropout(p=0.1, inplace=False)
+    (3): Linear(in_features=1440, out_features=1440, bias=True)
+    (4): GELU(approximate='none')
+    (5): Dropout(p=0.1, inplace=False)
+    (6): Linear(in_features=1440, out_features=1440, bias=True)
+    (7): GELU(approximate='none')
+    (8): Dropout(p=0.1, inplace=False)
+    (9): Linear(in_features=1440, out_features=1440, bias=True)
+  )
+  (transformer_backbone): LlamaBidirectionalModel(
+    (embed_tokens): Embedding(32000, 1440, padding_idx=0)
+    (layers): ModuleList(
+      (0-3): 4 x LlamaDecoderLayer(
+        (self_attn): LlamaAttention(
+          (q_proj): Linear(in_features=1440, out_features=1440, bias=False)
+          (k_proj): Linear(in_features=1440, out_features=1440, bias=False)
+          (v_proj): Linear(in_features=1440, out_features=1440, bias=False)
+          (o_proj): Linear(in_features=1440, out_features=1440, bias=False)
+        )
+        (mlp): LlamaMLP(
+          (gate_proj): Linear(in_features=1440, out_features=4416, bias=False)
+          (up_proj): Linear(in_features=1440, out_features=4416, bias=False)
+          (down_proj): Linear(in_features=4416, out_features=1440, bias=False)
+          (act_fn): SiLUActivation()
+        )
+        (input_layernorm): LlamaRMSNorm((1440,), eps=1e-06)
+        (post_attention_layernorm): LlamaRMSNorm((1440,), eps=1e-06)
+      )
+    )
+    (norm): LlamaRMSNorm((1440,), eps=1e-06)
+    (rotary_emb): NoRoPE()
+  )
+  (project_out): Sequential(
+    (0): Linear(in_features=1440, out_features=1440, bias=True)
+    (1): GELU(approximate='none')
+    (2): Dropout(p=0.1, inplace=False)
+    (3): Linear(in_features=1440, out_features=1440, bias=True)
+    (4): GELU(approximate='none')
+    (5): Dropout(p=0.1, inplace=False)
+    (6): Linear(in_features=1440, out_features=1440, bias=True)
+    (7): GELU(approximate='none')
+    (8): Dropout(p=0.1, inplace=False)
+    (9): Linear(in_features=1440, out_features=2000, bias=True)
+  )
+  (final_down_then_up): Sequential(
+    (0): Linear(in_features=2000, out_features=250, bias=True)
+    (1): GELU(approximate='none')
+    (2): Linear(in_features=250, out_features=2000, bias=True)
+  )
+  (relu): ReLU()
+)
+[numerics-phase] rank=0 case=train2 phase=built t=10.61
+[numerics-phase] rank=0 case=train2 phase=step0 t=13.01
+[numerics-phase] rank=0 case=train2 phase=collected0 t=13.01
+[numerics-phase] rank=0 case=train2 phase=fingerprinted0 t=15.09
+[numerics-phase] rank=0 case=train2 phase=written0 t=15.13
+[numerics-phase] rank=0 case=train2 phase=step1 t=15.78
+[numerics-phase] rank=0 case=train2 phase=collected1 t=15.79
+[numerics-phase] rank=0 case=train2 phase=fingerprinted1 t=17.11
+[numerics-phase] rank=0 case=train2 phase=written1 t=17.13
