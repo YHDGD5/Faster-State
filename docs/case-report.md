@@ -54,14 +54,17 @@ is calibrated against a candidate known to do different work:
 | the candidate | 6.7e-3 |
 | control arm, learning rate x 1.02 | 2.3e-1 |
 
-The tolerance is 1e-2, which sits in that gap. Both arms are rerun by anyone who repeats the check.
+The tolerance is 1e-2, which sits in that gap. This control arm is a calibration of the tolerance, not an
+end-to-end gate rejection: in a full check it is stopped earlier — at the benefit gate, since a 2 % learning
+rate change is not a measurable speedup, and on the record path by its `invariants`. Anyone repeating the check
+can reproduce the 2.3e-1 with `bench/traj_compare.py` over that arm's recordings.
 
 ## 3. The judge was tested against known-wrong candidates
 
 | candidate | expected | observed |
 |---|---|---|
 | unmodified reference | no benefit | `UNAVAILABLE` / `no_benefit`, 0.9384x |
-| control arm `lr x 1.02` | gate 4 | `INCORRECT` |
+| control arm `lr x 1.02` | gate 1 (1.03x is not a speedup) | `UNAVAILABLE` / `no_benefit` |
 | tampered frozen file | gate 0 | `ERROR` |
 
 ## 4. What the first version of this judge got wrong
