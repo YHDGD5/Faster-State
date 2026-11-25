@@ -8,10 +8,21 @@ This repository is the case package. The large frozen assets live on Hugging Fac
 
 ## Result
 
-| round | start | speedup (full `check`) | tier |
-|---|---|---|---|
-| 1 — cold, unmodified tree | `9bbfe78` | **1.885x** | N0, 794/794 bit-identical |
-| 2 — warm, from round 1's tree | round 1 | _pending_ | _pending_ |
+| round | tree | candidate s/iter | live reference in that check | speedup | tier |
+|---|---|---|---|---|---|
+| 1 — cold, unmodified start | `4b0d91d` | 0.1883 | 0.355 | **1.885x** | N1 |
+| 2 — warm, from round 1's tree | `e91612c` | 0.1797–0.1789 | 0.360–0.369 | **2.02–2.08x** | N1 |
+
+Three denominators appear in this repository and they are not interchangeable:
+
+- **live reference in that check** — two runs of `targets/reference` timed in the same session. This is what gate
+  1 divides by, and it is the column above. The reference moves 11 % between runs on this shared host.
+- **0.3713 s/iteration** — the frozen `task/timing_ref.json`, recorded once at formulation. Against it the same
+  candidates read 1.97x and 2.07–2.09x.
+- **0.3956 s/iteration** — the unmodified tree, measured at the time of the run. Against it the same candidates
+  read 2.10x and 2.21–2.23x.
+
+The headline number is the harness's own, which is the first column's ratio.
 
 Both rounds are reported separately on purpose: round 2 begins from a tree that already carries round 1's
 changes and from a workspace that contains round 1's findings. The cold number is the one that measures an
@@ -41,8 +52,14 @@ python bench/bench.py check --tree <candidate> --out <dir>
 |---|---|
 | 0 structure | did the tree change something that makes the measurement meaningless? |
 | 1 benefit | is the candidate faster than **two live reference runs** in the same session? |
-| 2 bitwise | are all 794 recorded tensors bit-identical to the frozen reference? |
-| 3 statistical | does the numerics tier stay at N0? |
+| 2 record | are the recorded tensors of the **eager** path bit-identical to the reference? (a record, not the verdict) |
+| 3 batches | does the candidate's own dataloader produce the reference's batches, element for element? |
+| 4 trajectory | does the candidate's real training trajectory stay inside a bound frozen from the reference's own repeats? |
+
+Gates 3 and 4 run the configuration gate 1 times, and they carry the verdict. They were added after both runs,
+once a review showed gate 2 recorded an eager step while gate 1 timed a compiled one — see
+[`task/judge_changes.md`](task/judge_changes.md). The tier the case reports is **N1**: the timed path is not
+bitwise reproducible, because flash attention's backward accumulates with atomics.
 
 Timing: 30 warm-up iterations, then 3 windows of 40, judged on window means; bands are derived from the
 measured 17–20 % run-to-run noise of a shared host. `bench/`, `numerics/`, `task/` and `targets/` are
@@ -53,9 +70,10 @@ The judge was tested against three known-wrong candidates before it was trusted:
 | candidate | expected | observed |
 |---|---|---|
 | unmodified reference | no benefit | `UNAVAILABLE` / `no_benefit`, 0.9384x |
-| control arm `lr x 1.02` | gate 2 | `INCORRECT`, invariants: 0.0001 vs 0.000102 |
+| **control arm on the optimized tree, `lr x 1.02`** | gate 4 | _pending_ |
+| control arm on the reference, `lr x 1.02` | gate 1 (1.03x is not a speedup) | `UNAVAILABLE` / `no_benefit` |
 | tampered frozen file | gate 0 | `ERROR` at structure |
-| pristine reference | pass | `PASS`, bitwise, N0, 794/794 |
+| pristine reference | pass | `PASS` |
 
 ## Assets
 
@@ -110,7 +128,9 @@ and `WORK_LOG.round1.md`.
 
 ```
 bench/        the judge: bench.py, recipe.py, timing.py, state_adapter.py, bench.json,
-              records/ref (2 steps x 397 tensors), thresholds.json (794 gates)
+              records/ref (2 steps x 397 tensors), thresholds.json (794 gates),
+              batch_check.py and traj_run.py/traj_compare.py (the two gates on the timed path),
+              traj/ (the frozen reference trajectories)
 numerics/     the numerics tier machinery (record, trajectory, judge, stats)
 task/         formulation.json (input fingerprints), timing_ref.json (0.3713 s/iter)
 prep/         rebuilds the slice from the raw Tahoe-100M shards

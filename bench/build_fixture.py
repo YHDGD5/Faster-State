@@ -30,6 +30,13 @@ _tmp_toml = Path(tempfile.mkdtemp(prefix='statefix-')) / 'dataset.toml'
 _tmp_toml.write_text(_toml_text)
 a.toml = str(_tmp_toml)
 sys.path.insert(0, str(Path(a.tree).resolve() / 'src'))
+# Import the tree's own package first: `state/__init__.py` installs the data-pipeline patches, and the loader
+# workers are forked later, so without this the batch would be drawn through the unpatched cell_load and the
+# comparison would be of the stock loader against itself.
+try:
+    import state  # noqa: F401
+except Exception as exc:  # a tree that has no package, or one that fails to import
+    print(f'[build_fixture] no state package to import: {exc}', flush=True)
 from cell_load.utils.modules import get_datamodule
 
 random.seed(a.seed); np.random.seed(a.seed); torch.manual_seed(a.seed)

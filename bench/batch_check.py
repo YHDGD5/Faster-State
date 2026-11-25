@@ -31,6 +31,27 @@ def draw(tree, toml, n, seed, out):
     return torch.load(out, map_location='cpu', weights_only=False), None
 
 
+def normalise(batch):
+    """Rebuild the dense gene-count tensor from either side's transport format.
+
+    The reference hands the collate a dense [cells, genes] tensor; a candidate may ship the same values as a
+    CSR bundle and densify on the device. "The batches are identical" has to mean the resulting dense counts
+    are identical -- the format is the candidate's business, the values are not.
+    """
+    b = dict(batch)
+    c = b.get('pert_cell_counts')
+    if isinstance(c, dict) and c.get('__csr_batch__'):
+        n_cells, n_genes = int(c['n_cells']), int(c['n_genes'])
+        rowptr, cols, vals = c['rowptr'].long(), c['cols'].long(), c['values']
+        dense = torch.zeros(n_cells, n_genes, dtype=vals.dtype)
+        for i in range(n_cells):
+            s_, e_ = int(rowptr[i]), int(rowptr[i + 1])
+            if e_ > s_:
+                dense[i].index_copy_(0, cols[s_:e_], vals[s_:e_])
+        b['pert_cell_counts'] = dense
+    return b
+
+
 def leaves(obj, path=''):
     """Walk dicts, lists and tensors down to (path, tensor) pairs."""
     if torch.is_tensor(obj):
@@ -66,7 +87,7 @@ def main():
 
     rows, worst = [], None
     for i, (rb, cb) in enumerate(zip(ref['ref'], cand['ref'])):
-        lr, lc = dict(leaves(rb)), dict(leaves(cb))
+        lr, lc = dict(leaves(normalise(rb))), dict(leaves(normalise(cb)))
         for k in sorted(set(lr) | set(lc)):
             if k not in lr or k not in lc:
                 rows.append({'batch': i, 'key': k, 'equal': False, 'reason': 'missing'})

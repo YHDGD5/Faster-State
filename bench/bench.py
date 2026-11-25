@@ -721,14 +721,15 @@ def data_gate(tree, out, cand_env):
 
 
 def path_gate(tree, out, cand_env):
-    """Gate: the candidate's real training trajectory must stay within the reference's.
+    """Gate: the candidate's real training trajectory must stay inside the reference's frozen bound.
 
     Recorded through `state tx train` with the bench's own recipe, so it covers the configuration gate 1
-    timed -- compiled blocks, the data pipeline, the matmul precision the entrypoint sets.
+    timed -- the compiled blocks, the data pipeline, and the matmul precision the entrypoint itself sets.
+    Judged against `bench/traj/frozen.json`, which was written from repeats of the reference *before* any
+    candidate was recorded; see bench/traj_compare.py.
     """
     p = CFG['path']
     rec = out / 'traj'
-    ref_dirs = sorted(str(x) for x in path(p['ref']).iterdir() if x.is_dir())
     for seed in p['seeds']:
         for rep in range(p['repeats']):
             dest = rec / f's{seed}_{rep}'
@@ -736,7 +737,7 @@ def path_gate(tree, out, cand_env):
                 train_args = recipe.hydra_overrides(str(resolved_toml(tmp)), Path(tmp) / 'train',
                                                     f'p{seed}_{rep}', CFG['timing'].get('max_steps', 10_000_000))
                 argv = [str(PY), str(BENCH / 'traj_run.py'), '--tree', str(tree), '--out', str(dest),
-                        '--steps', str(p['steps']), '--seed', str(seed), *train_args]
+                        '--steps', str(p['steps']), '--seed', str(seed), '--losses', *train_args]
                 env = base_env(tmp, cand_env, pythonpath=[Path(tree) / recipe.SRC])
                 log_file = out / f'traj_s{seed}_{rep}.log'
                 r = run_gpu(argv, tree, env, log_file, f'trajectory seed {seed}', TIMEOUT['trajectory'])
@@ -745,8 +746,8 @@ def path_gate(tree, out, cand_env):
                         'reason': f'trajectory run exited {r["returncode"]}; see {log_file.name}'}
     rep_file = out / 'traj_report.json'
     cand_dirs = [str(rec / f's{seed}_{i}') for seed in p['seeds'] for i in range(p['repeats'])]
-    argv = [str(PY), str(BENCH / 'traj_compare.py'), *[f'--ref={d}' for d in ref_dirs],
-            *[f'--cand={d}' for d in cand_dirs], '--tol', str(p['tol']), '--out', str(rep_file)]
+    argv = [str(PY), str(BENCH / 'traj_compare.py'), 'judge', '--frozen', str(path(p['frozen'])),
+            *[f'--cand={d}' for d in cand_dirs], '--out', str(rep_file)]
     r = subprocess.run(argv, capture_output=True, text=True)
     if not rep_file.exists():
         return {'status': 'ERROR', 'verdict': 'error', 'reason': (r.stderr or r.stdout)[-800:]}

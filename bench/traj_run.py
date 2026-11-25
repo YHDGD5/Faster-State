@@ -22,7 +22,7 @@ from pathlib import Path
 import torch
 from torch.optim.optimizer import register_optimizer_step_post_hook
 
-SAMPLE_TENSORS = 6
+SAMPLE_TENSORS = 24
 SAMPLE_ELEMS = 1 << 16
 
 
@@ -31,16 +31,34 @@ class StopTraj(BaseException):
     cannot swallow it."""
 
 
+def pick(params, k):
+    """k parameters spread evenly over the list, so backbone, decoder and head are all represented."""
+    n = len(params)
+    if n <= k:
+        return list(params)
+    return [params[i] for i in sorted({round(i * (n - 1) / (k - 1)) for i in range(k)})]
+
+
 def sketch(params):
+    """A digest over the sampled tensors, and well-conditioned scalars for each.
+
+    Three statistics per tensor: the L2 norm and the largest magnitude (both immune to the cancellation that
+    makes a plain sum of near-equal positive and negative values ill-conditioned), and the sum, kept as a
+    diagnostic only -- a fp32 sum of 64k elements differing by 1e-6 can move by 2e-4 through cancellation alone,
+    which says more about the sum than about the tensor.
+    """
     h = hashlib.sha256()
-    sums = []
+    sums, norms, absmax = [], [], []
     for t in params:
         flat = t.detach().reshape(-1)
         n = min(flat.numel(), SAMPLE_ELEMS)
         v = flat[:n].float().cpu().numpy()
         h.update(v.tobytes())
-        sums.append(float(v.astype('float64').sum()))
-    return h.hexdigest()[:16], sums
+        d = v.astype('float64')
+        sums.append(float(d.sum()))
+        norms.append(float((d * d).sum()) ** 0.5)
+        absmax.append(float(abs(d).max()) if d.size else 0.0)
+    return h.hexdigest()[:16], sums, norms, absmax
 
 
 def main():
@@ -86,10 +104,11 @@ def main():
         LightningModule.log = _log
 
     def hook(opt, *_args, **_kwargs):
-        params = opt.param_groups[0]['params'][:a.sample_tensors]
-        digest, sums = sketch(params)
+        params = [p for g in opt.param_groups for p in g['params']]
+        params = pick(params, a.sample_tensors)
+        digest, sums, norms, absmax = sketch(params)
         st['steps'].append({'step': st['k'], 'warmup': st['k'] < a.warmup,
-                            'digest': digest, 'sums': sums,
+                            'digest': digest, 'sums': sums, 'norms': norms, 'absmax': absmax,
                             'losses': st['logs'].get(st['k'], {}),
                             't': round(time.perf_counter() - st['t0'], 4)})
         st['k'] += 1

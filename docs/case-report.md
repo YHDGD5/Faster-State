@@ -97,24 +97,53 @@ never looked at.
 
 ## 5. Results
 
-Two goal runs on the same frozen judge. They are reported separately because they answer different questions.
+Two optimization runs, then a third tree built to be certifiable. Only the last one carries the case's number.
 
-| run | start | candidate | harness verdict |
-|---|---|---|---|
-| 1 — cold, unmodified tree | `9bbfe78` | 0.1883 s/iter | **1.8848x** |
-| 2 — warm, from run 1's tree | run 1 | 0.1789 s/iter | **2.02–2.08x** (three runs) |
+| tree | commit | source_digest | candidate | speedup |
+|---|---|---|---|---|
+| cold run | `4b0d91d` | `825a070b8c0b8491…` | 0.1883 s/iter | 1.885x |
+| warm run | `e91612c` | `4e0a3577fcbaf938…` | 0.1789 s/iter | 2.02–2.08x |
+| **certified** | **`b438d76`** | **`dac3e78d826b381f…`** | **0.2215 s/iter** | **1.675x** |
 
-Round 1 is the comparable number: it started from the untouched tree with nothing but the task text. Round 2
-started from round 1's tree, in a workspace that held round 1's work log, a hotspot map written by the
-formulator, and a goal line naming 1.885x. It measures how much headroom is left, not what an unassisted agent
-reaches.
+The first two are what the two goal runs reached. The third is the same data-path work with `torch.compile`
+turned off — two lines — and it is the one the trajectory gate certifies. The speed is lower than what the runs
+achieved; section 5's table below is why.
 
-The spread within round 2 — 2.02, 2.06, 2.08 — is the denominator, not the candidate. Gate 1 divides by two live
-reference runs, and on this shared host the reference moves between 0.36 and 0.386 s/iteration (11 % spread). The
-candidate itself is stable at 0.174–0.180.
+Three denominators appear and are not interchangeable: the **live reference** timed in the same session (what
+gate 1 divides by; 0.355–0.386 s/iteration, 11 % spread on this shared host), the **frozen** 0.3713
+(`task/timing_ref.json`), and the **unmodified tree** measured at the time (0.3956). 0.3956 / 0.1883 is 2.10x;
+the 1.885x divides by that check's live reference.
 
-Both runs are **tier N1**: statistically equivalent, not bitwise. That is the honest ceiling for a timed
-configuration in which the kernel of the largest operation is not deterministic.
+### What the trajectory gate says about each tree
+
+The gate records `state tx train` at three seeds for 12 steps and compares it against a bound frozen from
+**ten repeats of the reference per seed** — 3σ per (step, component), written before any candidate was recorded.
+The judged statistics are the L2 norm and the largest magnitude of 24 sampled parameter tensors, plus the
+model's loss scalars. Step timing, flop counters and the logged gradient norm are recorded but not judged: they
+are diagnostics, and the first round deliberately computes the gradient norm differently for logging.
+
+| tree | speedup | worst deviation | steps outside 3σ | verdict |
+|---|---|---|---|---|
+| **data path only, no compile (`b438d76`)** | **1.675x** | **1.86σ** | **0 / 30** | **equivalent** |
+| data path + `torch.compile` (`4b0d91d`) | 1.885–1.934x | 4.14σ | 3 / 30 | different |
+| data path + compile + graph (`e91612c`) | 2.02–2.16x | 5.32σ | 4 / 30 | different |
+| control: `lr x 1.02` from step 5 | 1.937x | **1864.96σ** | 19 / 30 | different |
+
+This is the case's central result, and it is not the one the run's own work log claimed.
+
+**The data-path work is numerically equivalent.** It passes with no step outside the bound.
+
+**`torch.compile` is not.** It lands 4.1–5.3σ out, beyond the reference's own run-to-run spread. Reordering the
+backbone's reductions moves the parameters more than repeating the reference at the same seed does. So the case
+certifies the slower tree.
+
+The control arm fails by three orders of magnitude more, which is what makes the gate a gate.
+
+Two things about the measurement itself had to be fixed to reach that table, and both are recorded in
+`task/judge_changes.md`: the judged statistic was initially a plain sum, which is ill-conditioned — cancellation
+turned a 1e-6 difference into a 213σ reading; and the bound was initially estimated from three repeats, which
+does not pin σ down — the certified tree measured 2.82σ in one recording and 3.96σ in another, flipping on a
+single step-seed out of thirty.
 
 ## 6. What the runs found
 

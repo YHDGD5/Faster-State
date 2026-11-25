@@ -114,7 +114,9 @@
    44
   ],
   "repeats": 1,
-  "tol": 0.01,
-  "ref": "bench/traj"
+  "frozen": "bench/traj/frozen.json",
+  "controls": {
+   "lr_x1.02": "bench/traj/control_lr102"
+  }
  }
 }
